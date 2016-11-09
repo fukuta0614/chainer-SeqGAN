@@ -10,13 +10,16 @@ import numpy as np
 import chainer
 from chainer import optimizers
 from chainer import cuda
+from chainer import serializers
 import tensorflow as tf
 import multiprocessing as mp
-from model import SeqGAN
-from text_cnn import TextCNN
-from named_weight_decay import NamedWeightDecay
-from chainer import serializers
-from arasuji import Arasuji
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from models import SeqGAN, TextCNN
+from optimizer_hook import NamedWeightDecay
+
+from dataset.arasuji import Arasuji
 
 
 os.environ['PATH'] += ':/usr/local/cuda/bin'
@@ -26,6 +29,7 @@ parser.add_argument("--out", default='')
 parser.add_argument("--gen", default='')
 parser.add_argument("--dis", default='')
 parser.add_argument('--gpu', '-g', type=int, default=0)
+parser.add_argument('--parallel', '-p', default=0, type=int)
 
 #  Generator  Hyper-parameters
 parser.add_argument("--gen_emb_dim", type=int, default=128)
@@ -58,7 +62,10 @@ parser.add_argument("--sample_per_iter", type=int, default=10000)
 args = parser.parse_args()
 
 # multiprocess worker
-pool = mp.Pool(16)
+if args.parallel > 0:
+    pool = mp.Pool(16)
+else:
+    pool = None
 
 batch_size = args.batch_size
 assert args.sample_per_iter % batch_size == 0
@@ -82,7 +89,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 # load data arasuji loader
-with open('arasuji.dat', 'rb') as f:
+with open('dataset/arasuji.dat', 'rb') as f:
     arasuji = pickle.load(f)
 
 train_num = len(arasuji.train_idx)
@@ -93,8 +100,8 @@ start_token = 0
 
 # generator
 generator = SeqGAN(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
-                   sequence_length=seq_length, start_token=start_token, lstm_layer=args.num_lstm_layer
-                   ).to_gpu()
+                   sequence_length=seq_length, start_token=start_token, lstm_layer=args.num_lstm_layer,
+                   dropout=True).to_gpu()
 if args.gen:
     serializers.load_hdf5(args.gen, generator)
 
@@ -117,6 +124,8 @@ dis_optimizer.add_hook(NamedWeightDecay(args.dis_l2_reg_lambda, '/out/'))
 
 # summaries
 sess = tf.Session()
+sess.run(tf.initialize_all_variables())
+
 summary_dir = os.path.join(out_dir, "summaries")
 
 loss_ = tf.placeholder(tf.float32)

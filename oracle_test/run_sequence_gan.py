@@ -1,5 +1,6 @@
 import argparse
 import os
+
 import sys
 import pickle
 import random
@@ -19,6 +20,8 @@ from utils_oracle import TARGET_LSTM, Gen_Data_loader, Dis_dataloader, Likelihoo
 from models import SeqGAN, TextCNN
 from optimizer_hook import NamedWeightDecay
 
+
+np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
 
 os.environ['PATH'] += ':/usr/local/cuda/bin'
 
@@ -148,7 +151,7 @@ target_lstm = TARGET_LSTM(vocab_size, 64, 32, 32, 20, 0, target_params)
 start_token = 0
 
 # generator
-generator = SeqGAN(seq_length, vocab_size, gen_batch_size, gen_emb_dim, gen_hidden_dim, start_token).to_gpu()
+generator = SeqGAN(seq_length, vocab_size, gen_emb_dim, gen_hidden_dim, start_token, oracle=True).to_gpu()
 if args.gen:
     serializers.load_hdf5(args.gen, generator)
 
@@ -177,7 +180,7 @@ summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 dis_train_count = 0
 test_count = 0
 
-gen_optimizer = optimizers.Adam(alpha=1e-2)
+gen_optimizer = optimizers.Adam(alpha=1e-3)
 gen_optimizer.setup(generator)
 gen_optimizer.add_hook(chainer.optimizer.GradientClipping(gen_grad_clip))
 
@@ -220,7 +223,7 @@ else:
     summary_writer.add_summary(summary, test_count)
     print('After pre-training:' + ' ' + str(test_loss))
 
-gen_optimizer = optimizers.Adam(alpha=1e-2)
+gen_optimizer = optimizers.Adam(alpha=1e-3)
 gen_optimizer.setup(generator)
 gen_optimizer.add_hook(chainer.optimizer.GradientClipping(gen_grad_clip))
 
@@ -274,6 +277,7 @@ for epoch in range(1, total_epoch):
     for step in range(g_steps):
         samples = generator.generate(gen_batch_size, train=True)
         rewards = rollout_generator.get_rewards(samples, discriminator, rollout_num=16, pool=pool, gpu=args.gpu)
+        print(rewards[:30])
         loss = generator.reinforcement_step(samples, rewards, g_steps=g_steps)
         gen_optimizer.zero_grads()
         loss.backward()
@@ -296,10 +300,14 @@ for epoch in range(1, total_epoch):
         dis_batches = dis_data_loader.batch_iter(zip(dis_x_train, dis_y_train), dis_batch_size, K)
         sum_train_loss = []
         sum_train_accuracy = []
+        flag = True
         for batch in dis_batches:
             try:
                 x_batch, y_batch = zip(*batch)
                 loss, acc = discriminator(np.array(x_batch), y_batch, dis_dropout_keep_prob)
+                if flag:
+                    print(float(acc.data))
+                    flag=False
                 dis_optimizer.zero_grads()
                 loss.backward()
                 dis_optimizer.update()

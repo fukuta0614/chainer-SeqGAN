@@ -11,11 +11,10 @@ def choice(t):
 
 
 class SeqGAN(chainer.Chain):
-    def __init__(self, sequence_length, vocab_size, batch_size, emb_dim, hidden_dim,
-                 start_token, reward_gamma=0.95, lstm_layer=1, oracle=False):
+    def __init__(self, sequence_length, vocab_size, emb_dim, hidden_dim,
+                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False):
 
         self.vocab_size = vocab_size
-        self.batch_size = batch_size
         self.emb_dim = emb_dim
         self.hidden_dim = hidden_dim
         self.sequence_length = sequence_length
@@ -24,7 +23,7 @@ class SeqGAN(chainer.Chain):
         self.g_params = []
         self.d_params = []
         self.oracle = oracle
-        self.dropout = False
+        self.dropout = dropout
         self.temperature = 1.0
         self.state = {}
         layers = dict()
@@ -195,6 +194,7 @@ class SeqGAN(chainer.Chain):
         :param dis: discriminator
         :param pool: multiprocess.Pool
         :param rollout_num: num of roll out
+        :param gpu: gpu_id
 
         :return: (batch, seq_length) rewards[i,j] means rewards of a_{j-1} of batch i
         """
