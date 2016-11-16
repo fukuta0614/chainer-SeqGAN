@@ -12,7 +12,7 @@ def choice(t):
 
 class SeqGAN(chainer.Chain):
     def __init__(self, sequence_length, vocab_size, emb_dim, hidden_dim,
-                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False):
+                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False, free_pretrain=False):
 
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
@@ -26,6 +26,7 @@ class SeqGAN(chainer.Chain):
         self.dropout = dropout
         self.temperature = 1.0
         self.state = {}
+        self.free_pretrain = free_pretrain
         layers = dict()
         layers['embed'] = L.EmbedID(self.vocab_size, self.emb_dim,
                                     initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim)))
@@ -88,7 +89,11 @@ class SeqGAN(chainer.Chain):
 
     def decode_one_step(self, x, train=True):
         if self.dropout:
-            h0 = self.embed(x)
+            if len(x.data.shape) == 2:
+                h0 = x
+            else:
+                h0 = self.embed(x)
+
             h = self.lstm1(F.dropout(h0, train=train))
             if hasattr(self, "lstm2"):
                 h = self.lstm2(F.dropout(h, train=train))
@@ -151,7 +156,10 @@ class SeqGAN(chainer.Chain):
         accum_loss = 0
         for i in range(self.sequence_length):
             if i == 0:
-                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+                if self.free_pretrain:
+                    x = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=0.1, size=(batch_size, self.emb_dim)), 'float32'))
+                else:
+                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
             else:
                 x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
 
