@@ -16,7 +16,7 @@ import multiprocessing as mp
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models import SeqGAN, TextCNN
+from models import SeqGAN, TextCNN, SeqEncoder
 from optimizer_hook import NamedWeightDecay
 
 os.environ['PATH'] += ':/usr/local/cuda/bin'
@@ -33,7 +33,7 @@ parser.add_argument("--gen_emb_dim", type=int, default=128)
 parser.add_argument("--gen_hidden_dim", type=int, default=128)
 parser.add_argument("--gen_grad_clip", type=int, default=5)
 parser.add_argument("--gen_lr", type=float, default=1e-3)
-parser.add_argument("--num_lstm_layer", type=int, default=2)
+parser.add_argument("--num_lstm_layer", type=int, default=1)
 parser.add_argument("--no-dropout", dest='dropout', action='store_false', default=True)
 
 #  Discriminator  Hyper-parameters
@@ -58,7 +58,7 @@ parser.add_argument("--rollout_update_ratio", type=float, default=0.8)
 parser.add_argument("--sample_per_iter", type=int, default=10000)
 
 parser.add_argument("--free-pretrain", dest='free_pretrain', action='store_true', default=False)
-
+parser.add_argument("--ae-pretrain", dest='ae_pretrain', action='store_true', default=False)
 
 args = parser.parse_args()
 
@@ -100,10 +100,16 @@ vocab_size = 3000
 seq_length = 30
 start_token = 0
 
+if args.ae_pretrain:
+    encoder = SeqEncoder(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
+                         sequence_length=seq_length)
+else:
+    encoder = None
+
 # generator
 generator = SeqGAN(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
                    sequence_length=seq_length, start_token=start_token, lstm_layer=args.num_lstm_layer,
-                   dropout=args.dropout, free_pretrain=args.free_pretrain).to_gpu()
+                   dropout=args.dropout, free_pretrain=args.free_pretrain, encoder=encoder).to_gpu()
 if args.gen:
     serializers.load_hdf5(args.gen, generator)
 
@@ -116,6 +122,11 @@ if args.dis:
     serializers.load_hdf5(args.dis, discriminator)
 
 # set optimizer
+if args.ae_pretrain:
+    enc_optimizer = optimizers.Adam(alpha=args.gen_lr)
+    enc_optimizer.setup(encoder)
+    enc_optimizer.add_hook(chainer.optimizer.GradientClipping(args.gen_grad_clip))
+
 gen_optimizer = optimizers.Adam(alpha=args.gen_lr)
 gen_optimizer.setup(generator)
 gen_optimizer.add_hook(chainer.optimizer.GradientClipping(args.gen_grad_clip))
@@ -170,11 +181,20 @@ if not args.gen:
 
         for i in range(0, train_num, batch_size):
             batch = train_comment_data[perm[i:i+batch_size]]
-            g_loss = generator.pretrain_step(batch)
-            gen_optimizer.zero_grads()
-            g_loss.backward()
-            gen_optimizer.update()
-            pre_train_loss.append(float(g_loss.data))
+            if args.ae_pretrain:
+                g_loss = generator.pretrain_step_autoencoder(batch)
+                enc_optimizer.zero_grads()
+                gen_optimizer.zero_grads()
+                g_loss.backward()
+                enc_optimizer.update()
+                gen_optimizer.update()
+                pre_train_loss.append(float(g_loss.data))
+            else:
+                g_loss = generator.pretrain_step(batch)
+                gen_optimizer.zero_grads()
+                g_loss.backward()
+                gen_optimizer.update()
+                pre_train_loss.append(float(g_loss.data))
 
             # progress report
             gen_train_count += 1

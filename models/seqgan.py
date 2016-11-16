@@ -12,7 +12,7 @@ def choice(t):
 
 class SeqGAN(chainer.Chain):
     def __init__(self, sequence_length, vocab_size, emb_dim, hidden_dim,
-                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False, free_pretrain=False):
+                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False, free_pretrain=False, encoder = None):
 
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
@@ -27,6 +27,8 @@ class SeqGAN(chainer.Chain):
         self.temperature = 1.0
         self.state = {}
         self.free_pretrain = free_pretrain
+        self.encoder = encoder
+
         layers = dict()
         layers['embed'] = L.EmbedID(self.vocab_size, self.emb_dim,
                                     initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim)))
@@ -143,6 +145,33 @@ class SeqGAN(chainer.Chain):
             x = chainer.Variable(self.xp.asanyarray(generated, 'int32'), volatile=True)
 
         return gen_x
+
+    def pretrain_step_autoencoder(self, x_input):
+        """
+        Maximum likelihood Estimation
+
+        :param x_input:
+        :return: loss
+        """
+
+        h = self.encoder.encode(x_input)
+
+        self.reset_state()
+        batch_size = len(x_input)
+        accum_loss = 0
+        self.lstm1.h = h
+
+        for i in range(self.sequence_length):
+            if i == 0:
+                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+            else:
+                x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
+
+            scores = self.decode_one_step(x)
+            loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
+            accum_loss += loss
+
+        return accum_loss / self.sequence_length
 
     def pretrain_step(self, x_input):
         """
