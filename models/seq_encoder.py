@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 import chainer
 import chainer.functions as F
 import chainer.links as L
@@ -15,7 +17,8 @@ class SeqEncoder(chainer.Chain):
         super(SeqEncoder, self).__init__(
             embed=L.EmbedID(self.vocab_size, self.emb_dim),
             lstm1=L.LSTM(self.emb_dim, self.hidden_dim),
-            out=L.Linear(self.hidden_dim, self.vocab_size),
+            linear_mu=L.Linear(self.hidden_dim, self.hidden_dim),
+            linear_ln_var=L.Linear(self.hidden_dim, self.hidden_dim)
         )
 
     def reset_state(self):
@@ -34,4 +37,7 @@ class SeqEncoder(chainer.Chain):
             h0 = self.embed(x)
             h1 = self.lstm1(F.dropout(h0, train=train))
 
-        return h1
+        mu = self.linear_mu(h1)
+        ln_var = self.linear_ln_var(h1)
+
+        return h1, mu, ln_var

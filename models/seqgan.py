@@ -146,6 +146,35 @@ class SeqGAN(chainer.Chain):
 
         return gen_x
 
+    def pretrain_step_vrae(self, x_input):
+        """
+        Maximum likelihood Estimation
+
+        :param x_input:
+        :return: loss
+        """
+        batch_size = len(x_input)
+        _, mu_z, ln_var_z = self.encoder.encode(x_input)
+
+        z = F.gaussian(mu_z, ln_var_z)
+
+        self.reset_state()
+        accum_loss = 0
+        self.lstm1.h = z
+        for i in range(self.sequence_length):
+            if i == 0:
+                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+            else:
+                x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
+
+            scores = self.decode_one_step(x)
+            loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
+            accum_loss += loss
+
+        dec_loss = accum_loss / self.sequence_length
+        kl_loss = F.gaussian_kl_divergence(mu_z, ln_var_z) / batch_size
+        return dec_loss, kl_loss
+
     def pretrain_step_autoencoder(self, x_input):
         """
         Maximum likelihood Estimation
@@ -154,7 +183,7 @@ class SeqGAN(chainer.Chain):
         :return: loss
         """
 
-        h = self.encoder.encode(x_input)
+        h, _, _ = self.encoder.encode(x_input)
 
         self.reset_state()
         batch_size = len(x_input)
