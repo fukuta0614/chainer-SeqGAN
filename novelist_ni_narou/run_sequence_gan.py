@@ -21,6 +21,7 @@ from optimizer_hook import NamedWeightDecay
 
 from dataset.arasuji import Arasuji
 
+# cuda.cudnn_enable = False
 
 os.environ['PATH'] += ':/usr/local/cuda/bin'
 

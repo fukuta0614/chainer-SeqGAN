@@ -51,8 +51,8 @@ parser.add_argument("--gen_pretrain_epoch", type=int, default=100)
 parser.add_argument("--dis_pretrain_epoch", type=int, default=50)
 
 parser.add_argument("--g_steps", type=int, default=1)
-parser.add_argument("--d_steps", type=int, default=5)
-parser.add_argument("--K", type=int, default=5)
+parser.add_argument("--d_steps", type=int, default=3)
+parser.add_argument("--K", type=int, default=3)
 
 parser.add_argument("--rollout_update_ratio", type=float, default=0.8)
 parser.add_argument("--sample_per_iter", type=int, default=10000)
@@ -84,7 +84,7 @@ with open(os.path.join(out_dir, 'setting.txt'), 'w') as f:
         f.write('{} = {}\n'.format(k, v))
 
 
-cuda.get_device(args.gpu).use()
+# cuda.get_device(args.gpu).use()
 
 SEED = 88
 random.seed(SEED)

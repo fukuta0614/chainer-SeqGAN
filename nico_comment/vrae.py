@@ -155,7 +155,7 @@ if not args.gen:
         sum_g_loss = []
         sum_kl_loss = []
         perm = np.random.permutation(train_num)
-        C = epoch / args.gen_pretrain_epoch
+        C = epoch / 100
         for i in range(0, train_num, batch_size):
             batch = train_comment_data[perm[i:i+batch_size]]
             if args.vae:

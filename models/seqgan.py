@@ -132,7 +132,7 @@ class SeqGAN(chainer.Chain):
             self.x0 = np.random.normal(scale=1, size=(batch_size, self.emb_dim))
             x = chainer.Variable(self.xp.asanyarray(self.x0, 'float32'), volatile=True)
         elif random_state:
-            self.lstm1.h = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim))))
+            self.lstm1.h = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'), volatile=True)
             x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)
         else:
             x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)
