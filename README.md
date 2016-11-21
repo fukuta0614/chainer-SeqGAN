@@ -17,6 +17,8 @@ export TF_BINARY_URL=https://storage.googleapis.com/tensorflow/linux/cpu/tensorf
 
 # Mac OS X, CPU only, Python 3.4 or 3.5:
 export TF_BINARY_URL=https://storage.googleapis.com/tensorflow/mac/cpu/tensorflow-0.11.0-py3-none-any.whl
+
+pip install $TF_BINARY_URL
 ```
 
 [7:08]
