@@ -153,6 +153,7 @@ start_token = 0
 # generator
 generator = SeqGAN(seq_length, vocab_size, gen_emb_dim, gen_hidden_dim, start_token, oracle=True).to_gpu()
 if args.gen:
+    print(args.gen)
     serializers.load_hdf5(args.gen, generator)
 
 # discriminator
@@ -212,10 +213,9 @@ if not args.gen:
         summary = sess.run(target_loss_summary, feed_dict={loss_: test_loss})
         summary_writer.add_summary(summary, test_count)
 
-    with open(os.path.join(out_dir, "models", "gen_pretrain.model"), "wb") as f:
-        pickle.dump(generator, f)
-    with open(os.path.join(out_dir, "models", "gen_pretrain.opt"), 'wb') as f:
-        pickle.dump(gen_optimizer, f)
+    serializers.save_hdf5(os.path.join(out_dir, "models", "gen_pretrain.model"), generator)
+    serializers.save_hdf5(os.path.join(out_dir, "models", "gen_pretrain.opt"), gen_optimizer)
+
 else:
     test_count = gen_pretrain_epoch
     test_loss = generator.target_loss(target_lstm, 1000, gen_batch_size, sess)
@@ -258,8 +258,8 @@ if not args.dis:
         summary_writer.add_summary(summary, dis_train_count)
         summary = sess.run(dis_acc_summary, feed_dict={loss_: np.mean(sum_train_accuracy)})
         summary_writer.add_summary(summary, dis_train_count)
-    with open(os.path.join(out_dir, "models", "dis_pretrain.model"), "wb") as f:
-        pickle.dump(discriminator, f)
+    serializers.save_hdf5(os.path.join(out_dir, "models", "dis_pretrain.model"), discriminator)
+    serializers.save_hdf5(os.path.join(out_dir, "models", "dis_pretrain.opt"), dis_optimizer)
 
 # roll out generator
 rollout_generator = copy.deepcopy(generator)
@@ -275,10 +275,10 @@ for epoch in range(1, total_epoch):
     print('total batch: ', epoch)
 
     for step in range(g_steps):
-        samples = generator.generate(gen_batch_size, train=True)
+        samples = generator.generate(gen_batch_size, train=True, random_input=True)
         rewards = rollout_generator.get_rewards(samples, discriminator, rollout_num=16, pool=pool, gpu=args.gpu)
         print(rewards[:30])
-        loss = generator.reinforcement_step(samples, rewards, g_steps=g_steps)
+        loss = generator.reinforcement_step(samples, rewards, g_steps=g_steps, random_input=True)
         gen_optimizer.zero_grads()
         loss.backward()
         gen_optimizer.update()

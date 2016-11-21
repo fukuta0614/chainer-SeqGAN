@@ -39,7 +39,12 @@ class TextCNN(chainer.Chain):
 
     def forward(self, x_input, ratio=0.5, train=True):
 
-        batch_size, seq_length = x_input.shape
+        try:
+            batch_size, seq_length = x_input.shape
+        except:
+            batch_size = len(x_input)
+            seq_length = len(x_input[0])
+
         x = chainer.Variable(self.xp.asarray(x_input, 'int32'))
 
         # embedding

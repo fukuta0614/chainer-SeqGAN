@@ -19,6 +19,7 @@ class SeqGAN(chainer.Chain):
         self.hidden_dim = hidden_dim
         self.sequence_length = sequence_length
         self.start_token = start_token
+        self.x0 = None
         self.reward_gamma = reward_gamma
         self.g_params = []
         self.d_params = []
@@ -104,7 +105,11 @@ class SeqGAN(chainer.Chain):
             y = self.out(h)
             return y
         else:
-            h0 = self.embed(x)
+            if len(x.data.shape) == 2:
+                h0 = x
+            else:
+                h0 = self.embed(x)
+
             h = self.lstm1(h0)
             if hasattr(self, "lstm2"):
                 h = self.lstm2(h)
@@ -115,13 +120,18 @@ class SeqGAN(chainer.Chain):
             y = self.out(h)
             return y
 
-    def generate(self, batch_size, train=False, pool=None):
+    def generate(self, batch_size, train=False, pool=None, random_input=False):
         """
         :return: (batch_size, self.seq_length)
         """
 
         self.reset_state()
-        x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)
+        if random_input:
+            self.x0 = np.random.normal(scale=1, size=(batch_size, self.emb_dim))
+            x = chainer.Variable(self.xp.asanyarray(self.x0, 'float32'), volatile=True)
+        else:
+            x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)
+
         gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
 
         for i in range(self.sequence_length):
@@ -169,7 +179,7 @@ class SeqGAN(chainer.Chain):
 
         return accum_loss / self.sequence_length
 
-    def reinforcement_step(self, x_input, rewards, g_steps):
+    def reinforcement_step(self, x_input, rewards, g_steps, random_input=False):
         """
         :param x_input: (batch_size, seq_length)
         :param rewards: (batch_size, seq_length)
@@ -181,7 +191,10 @@ class SeqGAN(chainer.Chain):
         accum_loss = 0
         for j in range(self.sequence_length):
             if j == 0:
-                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+                if random_input:
+                    x = chainer.Variable(self.xp.asanyarray(self.x0, 'float32'))
+                else:
+                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
             else:
                 x = chainer.Variable(self.xp.asanyarray(x_input[:, j - 1], 'int32'))
 
