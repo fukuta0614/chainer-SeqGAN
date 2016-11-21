@@ -207,7 +207,7 @@ if not args.gen:
 
         if args.vae:
             print('\npre-train epoch {}  rec_loss {}  kl_loss {} loss {}'.format(epoch, np.mean(sum_g_loss), np.mean(sum_kl_loss), np.mean(pre_train_loss)))
-            print('\n           test     rec_loss {}  kl_loss {} loss {}'.format(epoch, np.mean(sum_test_g_loss), np.mean(sum_test_kl_loss), np.mean(test_loss)))
+            print('           test     rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_test_g_loss), np.mean(sum_test_kl_loss), np.mean(test_loss)))
             summary = sess.run(train_loss_summary, feed_dict={loss_: np.mean(pre_train_loss)})
             summary_writer.add_summary(summary, test_count)
             summary = sess.run(train_g_loss_summary, feed_dict={loss_: np.mean(sum_g_loss)})

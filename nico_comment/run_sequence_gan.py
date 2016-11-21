@@ -247,7 +247,6 @@ if not args.dis:
 
     for epoch in range(args.dis_pretrain_epoch):
 
-        # negative = np.vstack([generator.generate(batch_size, pool=pool) for x in range(args.sample_per_iter // batch_size)])
         negative = generator.generate(args.sample_per_iter)
 
         for k in range(args.K):
