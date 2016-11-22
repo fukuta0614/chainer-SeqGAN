@@ -159,7 +159,7 @@ class SeqGAN(chainer.Chain):
 
         return gen_x
 
-    def pretrain_step_vrae(self, x_input):
+    def pretrain_step_vrae(self, x_input, word_drop_ratio=0.0):
         """
         Maximum likelihood Estimation
 
@@ -178,7 +178,10 @@ class SeqGAN(chainer.Chain):
             if i == 0:
                 x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
             else:
-                x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
+                if np.random.random() > word_drop_ratio:
+                    x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
+                else:
+                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
 
             scores = self.decode_one_step(x)
             loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))

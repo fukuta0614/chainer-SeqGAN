@@ -30,13 +30,14 @@ parser.add_argument('--gpu', '-g', type=int, default=0)
 parser.add_argument('--parallel', '-p', default=0, type=int)
 
 #  Generator  Hyper-parameters
-parser.add_argument("--gen_emb_dim", type=int, default=128)
-parser.add_argument("--gen_hidden_dim", type=int, default=128)
+parser.add_argument("--gen_emb_dim", type=int, default=64)
+parser.add_argument("--gen_hidden_dim", type=int, default=64)
 parser.add_argument("--gen_grad_clip", type=int, default=5)
 parser.add_argument("--gen_lr", type=float, default=1e-3)
 parser.add_argument("--num_lstm_layer", type=int, default=1)
 parser.add_argument("--no-dropout", dest='dropout', action='store_false', default=True)
-
+parser.add_argument("--anneal_ratio", type=float, default=1e-3)
+parser.add_argument("--word_drop", type=float, default=0)
 #  Training  Hyper-parameters
 parser.add_argument("--batch_size", type=int, default=100)
 parser.add_argument("--total_epoch", type=int, default=800)
@@ -155,7 +156,7 @@ if not args.gen:
         sum_g_loss = []
         sum_kl_loss = []
         perm = np.random.permutation(train_num)
-        C = epoch / 100
+        C += args.anneal_ratio
         for i in range(0, train_num, batch_size):
             batch = train_comment_data[perm[i:i+batch_size]]
             if args.vae:
@@ -206,8 +207,9 @@ if not args.gen:
         test_count += 1
 
         if args.vae:
-            print('\npre-train epoch {}  rec_loss {}  kl_loss {} loss {}'.format(epoch, np.mean(sum_g_loss), np.mean(sum_kl_loss), np.mean(pre_train_loss)))
-            print('           test     rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_test_g_loss), np.mean(sum_test_kl_loss), np.mean(test_loss)))
+            print('\npre-train epoch {}'.format(epoch))
+            print('  train : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_g_loss), np.mean(sum_kl_loss), np.mean(pre_train_loss)))
+            print('   test : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_test_g_loss), np.mean(sum_test_kl_loss), np.mean(test_loss)))
             summary = sess.run(train_loss_summary, feed_dict={loss_: np.mean(pre_train_loss)})
             summary_writer.add_summary(summary, test_count)
             summary = sess.run(train_g_loss_summary, feed_dict={loss_: np.mean(sum_g_loss)})
