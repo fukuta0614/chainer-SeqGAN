@@ -3,7 +3,7 @@
 - implementation of [SeqGAN: Sequence Generative Adversarial Nets with Policy Gradient](https://arxiv.org/abs/1609.05473)
 - Complete oracle test in this paper
 
-# requirements
+## requirements
 
 - Python > 3.4
 - Chainer > 1.5
@@ -21,9 +21,6 @@ export TF_BINARY_URL=https://storage.googleapis.com/tensorflow/mac/cpu/tensorflo
 pip install $TF_BINARY_URL
 ```
 
-[7:08]
-pip install $TF_BINARY_URL
-```
 ## Usage
 
 ```
