@@ -154,7 +154,7 @@ class LSTM(LSTMBase):
         """
         self.c = self.h = None
 
-    def __call__(self, x):
+    def __call__(self, x, z):
         """Updates the internal state and returns the LSTM outputs.
 
         Args:
@@ -170,7 +170,7 @@ class LSTM(LSTMBase):
             self._initialize_params()
 
         batch = x.shape[0]
-        lstm_in = self.upward(x)
+        lstm_in = self.upward(x) + z  # add latent variable
         h_rest = None
         if self.h is not None:
             h_size = self.h.shape[0]
