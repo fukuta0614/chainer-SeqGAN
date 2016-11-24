@@ -31,6 +31,7 @@ class SeqGAN(chainer.Chain):
         self.encoder = encoder
         self.latent_dim = latent_dim if latent_dim else 0
         self.input_dim = self.emb_dim + self.latent_dim
+        self.dropout_ratio = 0.5
 
         layers = dict()
         layers['embed'] = L.EmbedID(self.vocab_size, self.emb_dim,
@@ -101,13 +102,13 @@ class SeqGAN(chainer.Chain):
             else:
                 h0 = self.embed(x)
 
-            h = self.lstm1(F.dropout(h0, train=train))
+            h = self.lstm1(F.dropout(h0, ratio=self.dropout_ratio, train=train))
             if hasattr(self, "lstm2"):
-                h = self.lstm2(F.dropout(h, train=train))
+                h = self.lstm2(F.dropout(h, ratio=self.dropout_ratio, train=train))
             if hasattr(self, "lstm3"):
-                h = self.lstm3(F.dropout(h, train=train))
+                h = self.lstm3(F.dropout(h, ratio=self.dropout_ratio, train=train))
             if hasattr(self, "lstm4"):
-                h = self.lstm4(F.dropout(h, train=train))
+                h = self.lstm4(F.dropout(h, ratio=self.dropout_ratio, train=train))
             y = self.out(h)
             return y
         else:
