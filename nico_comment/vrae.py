@@ -17,7 +17,7 @@ import multiprocessing as mp
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import SeqGAN, TextCNN, SeqEncoder
-from optimizer_hook import NamedWeightDecay
+# from optimizer_hook import NamedWeightDecay
 
 os.environ['PATH'] += ':/usr/local/cuda/bin'
 
@@ -55,10 +55,9 @@ else:
 
 batch_size = args.batch_size
 
+out = datetime.datetime.now().strftime('%m%d')
 if args.out:
-    out = args.out
-else:
-    out = str(int(time.time()))
+    out += '_'+args.out
 out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs_vrae", out))
 os.makedirs(os.path.join(out_dir, 'models'), exist_ok=True)
 
@@ -160,7 +159,7 @@ if not args.gen:
         for i in range(0, train_num, batch_size):
             batch = train_comment_data[perm[i:i+batch_size]]
             if args.vae:
-                g_loss, kl_loss = generator.pretrain_step_vrae(batch)
+                g_loss, kl_loss = generator.pretrain_step_vrae(batch, args.word_drop)
                 loss = g_loss + C * kl_loss
 
                 enc_optimizer.zero_grads()
@@ -199,10 +198,11 @@ if not args.gen:
                 loss = g_loss + C * kl_loss
                 sum_test_g_loss.append(float(g_loss.data))
                 sum_test_kl_loss.append(float(kl_loss.data))
+                test_loss.append(float(loss.data))
+
             else:
                 loss = generator.pretrain_step_(batch)
-
-            test_loss.append(float(loss.data))
+                test_loss.append(float(loss.data))
 
         test_count += 1
 

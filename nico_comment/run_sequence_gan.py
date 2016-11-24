@@ -285,7 +285,7 @@ if not args.dis:
 gen_optimizer = optimizers.Adam(alpha=args.gen_lr*0.1)
 gen_optimizer.setup(generator)
 gen_optimizer.add_hook(chainer.optimizer.GradientClipping(args.gen_grad_clip))
-c
+
 # roll out generator
 rollout_generator = copy.deepcopy(generator).to_cpu()
 rollout_params = np.asanyarray(tuple(param.data for param in rollout_generator.params()))
