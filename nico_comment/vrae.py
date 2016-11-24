@@ -30,16 +30,18 @@ parser.add_argument('--gpu', '-g', type=int, default=0)
 parser.add_argument('--parallel', '-p', default=0, type=int)
 
 #  Generator  Hyper-parameters
-parser.add_argument("--gen_emb_dim", type=int, default=64)
-parser.add_argument("--gen_hidden_dim", type=int, default=64)
+parser.add_argument("--gen_emb_dim", type=int, default=128)
+parser.add_argument("--gen_hidden_dim", type=int, default=128)
 parser.add_argument("--gen_grad_clip", type=int, default=5)
 parser.add_argument("--gen_lr", type=float, default=1e-3)
 parser.add_argument("--num_lstm_layer", type=int, default=1)
 parser.add_argument("--no-dropout", dest='dropout', action='store_false', default=True)
 parser.add_argument("--anneal_ratio", type=float, default=1e-3)
+parser.add_argument("--init_nokl", dest='init_nokl', action='store_true', default=False)
 parser.add_argument("--word_drop", type=float, default=0)
 parser.add_argument("--concat_z", dest='latent_dim', action='store_const', const=int(32))
 parser.add_argument("--concat_z_dim", dest='latent_dim', type=int)
+
 #  Training  Hyper-parameters
 parser.add_argument("--batch_size", type=int, default=100)
 parser.add_argument("--total_epoch", type=int, default=800)
@@ -119,8 +121,8 @@ train_loss_summary = tf.scalar_summary('train_loss', loss_)
 train_g_loss_summary = tf.scalar_summary('rec_loss', loss_)
 train_kl_loss_summary = tf.scalar_summary('kl_loss', loss_)
 test_loss_summary = tf.scalar_summary('test_loss', loss_)
-test_g_loss_summary = tf.scalar_summary('rec_loss', loss_)
-test_kl_loss_summary = tf.scalar_summary('kl_loss', loss_)
+test_g_loss_summary = tf.scalar_summary('test_rec_loss', loss_)
+test_kl_loss_summary = tf.scalar_summary('test_kl_loss', loss_)
 
 summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 
@@ -148,7 +150,10 @@ def progress_report(count, start_time, batchsize):
 if not args.gen:
     print('Start pre-training generator...')
     start = time.time()
-    C = 0
+    if args.init_nokl:
+        C = -args.anneal_ratio
+    else:
+        C = 0
     for epoch in range(args.gen_pretrain_epoch):
 
         # pre-train
@@ -211,6 +216,7 @@ if not args.gen:
             print('\npre-train epoch {}'.format(epoch))
             print('  train : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_g_loss), np.mean(sum_kl_loss), np.mean(pre_train_loss)))
             print('   test : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_test_g_loss), np.mean(sum_test_kl_loss), np.mean(test_loss)))
+
             summary = sess.run(train_loss_summary, feed_dict={loss_: np.mean(pre_train_loss)})
             summary_writer.add_summary(summary, test_count)
             summary = sess.run(train_g_loss_summary, feed_dict={loss_: np.mean(sum_g_loss)})

@@ -7,11 +7,11 @@ from chainer.cuda import cupy as xp
 
 
 class SeqEncoder(chainer.Chain):
-    def __init__(self, vocab_size, emb_dim, hidden_dim, latent_dim, sequence_length):
+    def __init__(self, vocab_size, emb_dim, hidden_dim, sequence_length, latent_dim=None):
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
         self.hidden_dim = hidden_dim
-        self.latent_dim = latent_dim
+        self.latent_dim = latent_dim if latent_dim else hidden_dim
         self.sequence_length = sequence_length
 
         super(SeqEncoder, self).__init__(

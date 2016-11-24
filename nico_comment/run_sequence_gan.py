@@ -71,10 +71,9 @@ else:
 batch_size = args.batch_size
 assert args.sample_per_iter % batch_size == 0
 
+out = datetime.datetime.now().strftime('%m%d')
 if args.out:
-    out = args.out
-else:
-    out = str(int(time.time()))
+    out += '_'+args.out
 out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", out))
 os.makedirs(os.path.join(out_dir, 'models'), exist_ok=True)
 
@@ -82,7 +81,6 @@ with open(os.path.join(out_dir, 'setting.txt'), 'w') as f:
     for k, v in args._get_kwargs():
         print('{} = {}'.format(k, v))
         f.write('{} = {}\n'.format(k, v))
-
 
 cuda.get_device(args.gpu).use()
 
@@ -102,7 +100,7 @@ start_token = 0
 
 if args.ae_pretrain:
     encoder = SeqEncoder(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
-                         sequence_length=seq_length)
+                         latent_dim=args.latent_dim, sequence_length=seq_length)
 else:
     encoder = None
 
@@ -282,7 +280,32 @@ if not args.dis:
 
     serializers.save_hdf5(os.path.join(out_dir, "models", "dis_pretrain.model"), discriminator)
 
-gen_optimizer = optimizers.Adam(alpha=args.gen_lr*0.1)
+else:
+    negative = generator.generate(1000)
+    positive = train_comment_data[np.random.permutation(train_num)[:1000]]
+    x = np.vstack([positive, negative])
+    y = np.array([1] * 1000 + [0] * 1000)
+    sum_train_loss = []
+    sum_train_accuracy = []
+    perm = np.random.permutation(len(y))
+    for i in range(0, len(y), batch_size):
+        x_batch = x[perm[i:i + batch_size]]
+        y_batch = y[perm[i:i + batch_size]]
+        loss, acc = discriminator(x_batch, y_batch, args.dis_dropout_keep_prob)
+        dis_optimizer.zero_grads()
+        loss.backward()
+        dis_optimizer.update()
+        sum_train_loss.append(float(loss.data))
+        sum_train_accuracy.append(float(acc.data))
+
+    print('\ndis-pretrain train_loss ', np.mean(sum_train_loss), 'train_acc ', np.mean(sum_train_accuracy))
+    dis_train_count = args.dis_pretrain_epoch
+    summary = sess.run(dis_loss_summary, feed_dict={loss_: np.mean(sum_train_loss)})
+    summary_writer.add_summary(summary, dis_train_count)
+    summary = sess.run(dis_acc_summary, feed_dict={loss_: np.mean(sum_train_accuracy)})
+    summary_writer.add_summary(summary, dis_train_count)
+
+gen_optimizer = optimizers.Adam(alpha=args.gen_lr * 0.001)
 gen_optimizer.setup(generator)
 gen_optimizer.add_hook(chainer.optimizer.GradientClipping(args.gen_grad_clip))
 
