@@ -305,7 +305,7 @@ else:
     summary = sess.run(dis_acc_summary, feed_dict={loss_: np.mean(sum_train_accuracy)})
     summary_writer.add_summary(summary, dis_train_count)
 
-gen_optimizer = optimizers.Adam(alpha=args.gen_lr * 0.001)
+gen_optimizer = optimizers.Adam(alpha=args.gen_lr)
 gen_optimizer.setup(generator)
 gen_optimizer.add_hook(chainer.optimizer.GradientClipping(args.gen_grad_clip))
 
@@ -329,7 +329,7 @@ for epoch in range(1, args.total_epoch):
         loss = generator.reinforcement_step(samples, rewards, g_steps=args.g_steps)
         gen_optimizer.zero_grads()
         loss.backward()
-        gen_optimizer.update()
+        # gen_optimizer.update()
 
         duration = time.time() - start
         step_time = time.time() - tmp
