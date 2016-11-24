@@ -12,7 +12,7 @@ def choice(t):
 
 class SeqGAN(chainer.Chain):
     def __init__(self, sequence_length, vocab_size, emb_dim, hidden_dim,
-                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False, free_pretrain=False, encoder = None):
+                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False, free_pretrain=False, encoder=None, latent_dim=None):
 
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
@@ -29,25 +29,27 @@ class SeqGAN(chainer.Chain):
         self.state = {}
         self.free_pretrain = free_pretrain
         self.encoder = encoder
+        self.latent_dim = latent_dim if latent_dim else 0
+        self.input_dim = self.emb_dim + self.latent_dim
 
         layers = dict()
         layers['embed'] = L.EmbedID(self.vocab_size, self.emb_dim,
                                     initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim)))
         if self.oracle:
-            layers['lstm1'] = L.LSTM(self.emb_dim, self.hidden_dim,
+            layers['lstm1'] = L.LSTM(self.input_dim, self.hidden_dim,
                                      lateral_init=chainer.initializers.normal.Normal(0.1),
                                      upward_init=chainer.initializers.normal.Normal(0.1),
                                      bias_init=chainer.initializers.normal.Normal(0.1),
                                      forget_bias_init=chainer.initializers.normal.Normal(0.1)
                                      )
         else:
-            layers['lstm1'] = L.LSTM(self.emb_dim, self.hidden_dim)
+            layers['lstm1'] = L.LSTM(self.input_dim, self.hidden_dim)
         if lstm_layer >= 2:
-            layers['lstm2'] = L.LSTM(self.emb_dim, self.hidden_dim)
+            layers['lstm2'] = L.LSTM(self.hidden_dim, self.hidden_dim)
         if lstm_layer >= 3:
-            layers['lstm3'] = L.LSTM(self.emb_dim, self.hidden_dim)
+            layers['lstm3'] = L.LSTM(self.hidden_dim, self.hidden_dim)
         if lstm_layer >= 4:
-            layers['lstm4'] = L.LSTM(self.emb_dim, self.hidden_dim)
+            layers['lstm4'] = L.LSTM(self.hidden_dim, self.hidden_dim)
         layers['out'] = L.Linear(self.hidden_dim, self.vocab_size, initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.hidden_dim)))
 
         super(SeqGAN, self).__init__(**layers)
@@ -90,9 +92,11 @@ class SeqGAN(chainer.Chain):
             self.lstm4.set_state(chainer.Variable(self.state['c4'].data.copy(), volatile=True),
                                  chainer.Variable(self.state['h4'].data.copy(), volatile=True))
 
-    def decode_one_step(self, x, train=True):
+    def decode_one_step(self, x, train=True, z=None):
         if self.dropout:
-            if len(x.data.shape) == 2:
+            if z is not None:
+                h0 = F.concat((self.embed(x), z))
+            elif len(x.data.shape) == 2:
                 h0 = x
             else:
                 h0 = self.embed(x)
@@ -128,6 +132,9 @@ class SeqGAN(chainer.Chain):
         """
 
         self.reset_state()
+        z = None
+        if self.latent_dim:
+            z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.latent_dim)), 'float32'), volatile=True)
         if random_input:
             self.x0 = np.random.normal(scale=1, size=(batch_size, self.emb_dim))
             x = chainer.Variable(self.xp.asanyarray(self.x0, 'float32'), volatile=True)
@@ -140,7 +147,7 @@ class SeqGAN(chainer.Chain):
         gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
 
         for i in range(self.sequence_length):
-            scores = self.decode_one_step(x, train)
+            scores = self.decode_one_step(x, train, z)
             pred = F.softmax(scores)
             pred = cuda.to_cpu(pred.data)
             # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
@@ -169,11 +176,15 @@ class SeqGAN(chainer.Chain):
         batch_size = len(x_input)
         _, mu_z, ln_var_z = self.encoder.encode(x_input)
 
-        z = F.gaussian(mu_z, ln_var_z)
-
         self.reset_state()
+
+        if self.latent_dim:
+            z = F.gaussian(mu_z, ln_var_z)
+        else:
+            self.lstm1.h = F.gaussian(mu_z, ln_var_z)
+            z = None
+
         accum_loss = 0
-        self.lstm1.h = z
         for i in range(self.sequence_length):
             if i == 0:
                 x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
@@ -183,7 +194,7 @@ class SeqGAN(chainer.Chain):
                 else:
                     x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
 
-            scores = self.decode_one_step(x)
+            scores = self.decode_one_step(x, z=z)
             loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
             accum_loss += loss
 

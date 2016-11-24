@@ -7,18 +7,18 @@ from chainer.cuda import cupy as xp
 
 
 class SeqEncoder(chainer.Chain):
-    def __init__(self, vocab_size, emb_dim, hidden_dim,
-                 sequence_length):
+    def __init__(self, vocab_size, emb_dim, hidden_dim, latent_dim, sequence_length):
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
         self.hidden_dim = hidden_dim
+        self.latent_dim = latent_dim
         self.sequence_length = sequence_length
 
         super(SeqEncoder, self).__init__(
             embed=L.EmbedID(self.vocab_size, self.emb_dim),
             lstm1=L.LSTM(self.emb_dim, self.hidden_dim),
-            linear_mu=L.Linear(self.hidden_dim, self.hidden_dim),
-            linear_ln_var=L.Linear(self.hidden_dim, self.hidden_dim)
+            linear_mu=L.Linear(self.hidden_dim, self.latent_dim),
+            linear_ln_var=L.Linear(self.hidden_dim, self.latent_dim)
         )
 
     def reset_state(self):

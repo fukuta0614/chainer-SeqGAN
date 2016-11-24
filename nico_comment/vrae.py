@@ -38,12 +38,14 @@ parser.add_argument("--num_lstm_layer", type=int, default=1)
 parser.add_argument("--no-dropout", dest='dropout', action='store_false', default=True)
 parser.add_argument("--anneal_ratio", type=float, default=1e-3)
 parser.add_argument("--word_drop", type=float, default=0)
+parser.add_argument("--concat_z", dest='latent_dim', action='store_const', const=int(32))
+parser.add_argument("--concat_z_dim", dest='latent_dim', type=int)
 #  Training  Hyper-parameters
 parser.add_argument("--batch_size", type=int, default=100)
 parser.add_argument("--total_epoch", type=int, default=800)
 parser.add_argument("--gen_pretrain_epoch", type=int, default=100)
 
-parser.add_argument("--vae", dest='vae', action='store_true', default=False)
+parser.add_argument("--no_vae", dest='vae', action='store_false', default=True)
 
 args = parser.parse_args()
 
@@ -66,7 +68,6 @@ with open(os.path.join(out_dir, 'setting.txt'), 'w') as f:
         print('{} = {}'.format(k, v))
         f.write('{} = {}\n'.format(k, v))
 
-
 cuda.get_device(args.gpu).use()
 
 SEED = 88
@@ -85,7 +86,7 @@ start_token = 0
 
 # encoder
 encoder = SeqEncoder(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
-                     sequence_length=seq_length).to_gpu()
+                     latent_dim=args.latent_dim, sequence_length=seq_length).to_gpu()
 
 if args.enc:
     serializers.load_hdf5(args.enc, encoder)
@@ -93,7 +94,7 @@ if args.enc:
 # generator
 generator = SeqGAN(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
                    sequence_length=seq_length, start_token=start_token, lstm_layer=args.num_lstm_layer,
-                   dropout=args.dropout, encoder=encoder).to_gpu()
+                   dropout=args.dropout, encoder=encoder, latent_dim=args.latent_dim).to_gpu()
 if args.gen:
     serializers.load_hdf5(args.gen, generator)
 
