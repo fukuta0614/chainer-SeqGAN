@@ -36,8 +36,9 @@ parser.add_argument("--gen_grad_clip", type=int, default=5)
 parser.add_argument("--gen_lr", type=float, default=1e-3)
 parser.add_argument("--num_lstm_layer", type=int, default=1)
 parser.add_argument("--no-dropout", dest='dropout', action='store_false', default=True)
+parser.add_argument("--kl_anneal", dest='kl_anneal', action='store_true', default=False)
 parser.add_argument("--anneal_ratio", type=float, default=1e-3)
-parser.add_argument("--init_nokl", dest='init_nokl', action='store_true', default=False)
+parser.add_argument("--initial_kl", type=float, default=1e-3)
 parser.add_argument("--word_drop", type=float, default=0)
 parser.add_argument("--concat_z", dest='latent_dim', action='store_const', const=int(32))
 parser.add_argument("--concat_z_dim", dest='latent_dim', type=int)
@@ -150,10 +151,7 @@ def progress_report(count, start_time, batchsize):
 if not args.gen:
     print('Start pre-training generator...')
     start = time.time()
-    if args.init_nokl:
-        C = -args.anneal_ratio
-    else:
-        C = 0
+    C = args.initial_kl
     for epoch in range(args.gen_pretrain_epoch):
 
         # pre-train
@@ -161,7 +159,7 @@ if not args.gen:
         sum_g_loss = []
         sum_kl_loss = []
         perm = np.random.permutation(train_num)
-        C += args.anneal_ratio
+
         for i in range(0, train_num, batch_size):
             batch = train_comment_data[perm[i:i+batch_size]]
             if args.vae:
@@ -200,7 +198,7 @@ if not args.gen:
             batch = test_comment_data[perm[i:i + batch_size]]
 
             if args.vae:
-                g_loss, kl_loss = generator.pretrain_step_vrae(batch)
+                g_loss, kl_loss = generator.pretrain_step_vrae(batch, train=False)
                 loss = g_loss + C * kl_loss
                 sum_test_g_loss.append(float(g_loss.data))
                 sum_test_kl_loss.append(float(kl_loss.data))
@@ -252,6 +250,9 @@ if not args.gen:
                 for x in samples:
                     f.write(''.join([vocab[w] for w in x]) + '\n')
 
-        if epoch > 0 and epoch % 10 == 0:
+        if args.kl_anneal:
+            C += args.anneal_ratio
+
+        if epoch > 0 and epoch % 5 == 0:
             serializers.save_hdf5(os.path.join(out_dir, "models", "gen_pretrain_{}.model".format(epoch)), generator)
             serializers.save_hdf5(os.path.join(out_dir, "models", "enc_pretrain_{}.model".format(epoch)), encoder)

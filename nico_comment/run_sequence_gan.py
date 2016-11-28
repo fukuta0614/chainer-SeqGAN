@@ -329,7 +329,7 @@ for epoch in range(1, args.total_epoch):
         loss = generator.reinforcement_step(samples, rewards, g_steps=args.g_steps)
         gen_optimizer.zero_grads()
         loss.backward()
-        # gen_optimizer.update()
+        gen_optimizer.update()
 
         duration = time.time() - start
         step_time = time.time() - tmp
@@ -352,7 +352,7 @@ for epoch in range(1, args.total_epoch):
         # negative = np.vstack([generator.generate(batch_size, pool=pool) for x in range(args.sample_per_iter // batch_size)])
         negative = generator.generate(args.sample_per_iter)
 
-        for i in range(args.K):
+        for k in range(args.K):
             positive = train_comment_data[np.random.permutation(train_num)[:args.sample_per_iter]]
 
             x = np.vstack([positive, negative])
@@ -361,7 +361,7 @@ for epoch in range(1, args.total_epoch):
             sum_train_accuracy = []
             perm = np.random.permutation(len(y))
 
-            for k in range(0, len(y), batch_size):
+            for i in range(0, len(y), batch_size):
                 x_batch = x[perm[i:i + batch_size]]
                 y_batch = y[perm[i:i + batch_size]]
                 loss, acc = discriminator(x_batch, y_batch, args.dis_dropout_keep_prob)

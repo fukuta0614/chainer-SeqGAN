@@ -33,7 +33,7 @@ class SeqEncoder(chainer.Chain):
         """
         self.reset_state()
         for i in range(self.sequence_length):
-            x = chainer.Variable(xp.asanyarray(x_input[:, self.sequence_length-i-1], 'int32'))
+            x = chainer.Variable(xp.asanyarray(x_input[:, self.sequence_length-i-1], 'int32'), volatile=not train)
             h0 = self.embed(x)
             h1 = self.lstm1(F.dropout(h0, train=train))
 
