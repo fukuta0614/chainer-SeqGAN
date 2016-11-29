@@ -80,14 +80,14 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 # load nico-comment dataset loader
-with open('nico_comment_processed.dat', 'rb') as f:
+with open('nico_comment_processed3.dat', 'rb') as f:
     train_comment_data, test_comment_data, train_tag_data, test_tag_data, vocab, tag_id = pickle.load(f)
 
 train_num = len(train_comment_data)
 test_num = len(test_comment_data)
 tag_dim = len(tag_id) if args.use_tag else 0
 vocab_size = 3000
-seq_length = 30
+seq_length = 20
 start_token = 0
 
 # encoder

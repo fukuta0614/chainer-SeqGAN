@@ -89,7 +89,7 @@ random.seed(SEED)
 np.random.seed(SEED)
 
 # load nico-comment dataset loader
-with open('nico_comment_processed.dat', 'rb') as f:
+with open('nico_comment_processed3.dat', 'rb') as f:
     train_comment_data, test_comment_data, train_tag_data, test_tag_data, vocab, tag_id = pickle.load(f)
 
 train_num = len(train_comment_data)
@@ -249,7 +249,8 @@ if not args.dis:
 
     for epoch in range(args.dis_pretrain_epoch):
 
-        negative = generator.generate(args.sample_per_iter, )
+        tag_batch = np.random.choice(train_tag_data, batch_size)
+        negative = generator.generate_use_tag(args.sample_per_iter, tag_batch, train=True)
 
         for k in range(args.K):
 
@@ -328,7 +329,7 @@ for epoch in range(1, args.total_epoch):
     # g-step
     mean_time = 0
     for step in range(args.g_steps):
-        samples = generator.generate(batch_size, train=True)
+        samples = generator.generate_use_tag(batch_size, train=True)
         rewards = rollout_generator.get_rewards(samples, discriminator, pool=pool, gpu=args.gpu)
         loss = generator.reinforcement_step(samples, rewards, g_steps=args.g_steps)
         gen_optimizer.zero_grads()
@@ -354,7 +355,8 @@ for epoch in range(1, args.total_epoch):
     for step in range(args.d_steps):
 
         # negative = np.vstack([generator.generate(batch_size, pool=pool) for x in range(args.sample_per_iter // batch_size)])
-        negative = generator.generate(args.sample_per_iter)
+        tag_batch = np.random.choice(train_tag_data, batch_size)
+        negative = generator.generate(args.sample_per_iter, tag_batch)
 
         for k in range(args.K):
             positive = train_comment_data[np.random.permutation(train_num)[:args.sample_per_iter]]

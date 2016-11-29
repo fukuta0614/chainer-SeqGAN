@@ -147,13 +147,18 @@ class SeqGAN(chainer.Chain):
 
         self.reset_state()
         batch_size = len(tag)
-        if x is not None:
-            _, mu_z, ln_var_z = self.encoder.encode_with_tag(x, tag, train)
-            z = F.gaussian(mu_z, ln_var_z)
+        if train:
+            tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
+            self.lstm1.h = tag_
         else:
-            z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'), volatile=not train)
-        tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
-        self.lstm1.h = self.dec_input(F.concat((z, tag_)))
+            if x is not None:
+                _, mu_z, ln_var_z = self.encoder.encode_with_tag(x, tag, train)
+                z = F.gaussian(mu_z, ln_var_z)
+            else:
+                z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'), volatile=not train)
+
+            tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
+            self.lstm1.h = self.dec_input(F.concat((z, tag_)))
 
         x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
 
