@@ -11,8 +11,8 @@ def choice(t):
 
 
 class SeqGAN(chainer.Chain):
-    def __init__(self, sequence_length, vocab_size, emb_dim, hidden_dim,
-                 start_token, reward_gamma=0.95, lstm_layer=1, dropout=False, oracle=False, free_pretrain=False, encoder=None, latent_dim=None):
+    def __init__(self, sequence_length, vocab_size, emb_dim, hidden_dim, start_token, reward_gamma=0.95, lstm_layer=1,
+                 dropout=False, oracle=False, free_pretrain=False, encoder=None, latent_dim=None, tag_dim=0):
 
         self.vocab_size = vocab_size
         self.emb_dim = emb_dim
@@ -36,6 +36,12 @@ class SeqGAN(chainer.Chain):
         layers = dict()
         layers['embed'] = L.EmbedID(self.vocab_size, self.emb_dim,
                                     initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim)))
+        if tag_dim > 0:
+            self.tag_num = tag_dim
+            layers['tag_embed'] = L.EmbedID(self.tag_num, self.tag_num,
+                                            initialW=np.random.normal(scale=0.1, size=(self.tag_num, self.tag_num)))
+            dec_input = self.tag_num + self.hidden_dim
+            layers['dec_input'] = L.Linear(dec_input, self.hidden_dim)
         if self.oracle:
             layers['lstm1'] = L.LSTM(self.input_dim, self.hidden_dim,
                                      lateral_init=chainer.initializers.normal.Normal(0.1),
@@ -112,7 +118,9 @@ class SeqGAN(chainer.Chain):
             y = self.out(h)
             return y
         else:
-            if len(x.data.shape) == 2:
+            if z is not None:
+                h0 = F.concat((self.embed(x), z))
+            elif len(x.data.shape) == 2:
                 h0 = x
             else:
                 h0 = self.embed(x)
@@ -126,6 +134,45 @@ class SeqGAN(chainer.Chain):
                 h = self.lstm4(h)
             y = self.out(h)
             return y
+
+    def generate_use_tag(self, tag, x=None, pool=None, train=False):
+        """
+        :return: (batch_size, self.seq_length)
+        """
+
+        self.reset_state()
+        batch_size = len(tag)
+        if x is not None:
+            _, mu_z, ln_var_z = self.encoder.encode_with_tag(x, tag, train)
+            z = F.gaussian(mu_z, ln_var_z)
+        else:
+            z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'), volatile=not train)
+        tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
+        self.lstm1.h = self.dec_input(F.concat((z, tag_)))
+
+        x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
+
+        gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
+
+        for i in range(self.sequence_length):
+            scores = self.decode_one_step(x, train)
+            pred = F.softmax(scores)
+            pred = cuda.to_cpu(pred.data)
+            # pred = cuda.to_cpu(pred.data) - np.finfo(np.float32).epsneg
+
+            if pool:
+                generated = pool.map(choice, [(self.vocab_size, p) for p in pred])
+            else:
+                generated = [np.random.choice(self.vocab_size, p=pred[j]) for j in range(batch_size)]
+                # generated = []
+                # for j in range(batch_size):
+                #     # histogram = np.random.multinomial(1, pred[j])
+                #     # generated.append(int(np.nonzero(histogram)[0]))
+
+            gen_x[:, i] = generated
+            x = chainer.Variable(self.xp.asanyarray(generated, 'int32'), volatile=not train)
+
+        return gen_x
 
     def generate(self, batch_size, train=False, pool=None, random_input=False, random_state=False):
         """
@@ -167,7 +214,7 @@ class SeqGAN(chainer.Chain):
 
         return gen_x
 
-    def pretrain_step_vrae(self, x_input, word_drop_ratio=0.0):
+    def pretrain_step_vrae_tag(self, x_input, tag, word_drop_ratio=0.0, train=True):
         """
         Maximum likelihood Estimation
 
@@ -175,7 +222,45 @@ class SeqGAN(chainer.Chain):
         :return: loss
         """
         batch_size = len(x_input)
-        _, mu_z, ln_var_z = self.encoder.encode(x_input)
+        _, mu_z, ln_var_z = self.encoder.encode_with_tag(x_input, tag, train)
+
+        self.reset_state()
+
+        if self.latent_dim:
+            z = F.gaussian(mu_z, ln_var_z)
+        else:
+            latent = F.gaussian(mu_z, ln_var_z)
+            tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
+            self.lstm1.h = self.dec_input(F.concat((latent, tag_)))
+            z = None
+
+        accum_loss = 0
+        for i in range(self.sequence_length):
+            if i == 0:
+                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
+            else:
+                if np.random.random() < word_drop_ratio and train:
+                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
+                else:
+                    x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'), volatile=not train)
+
+            scores = self.decode_one_step(x, z=z)
+            loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32'), volatile=not train))
+            accum_loss += loss
+
+        dec_loss = accum_loss / self.sequence_length
+        kl_loss = F.gaussian_kl_divergence(mu_z, ln_var_z) / batch_size
+        return dec_loss, kl_loss
+
+    def pretrain_step_vrae(self, x_input, word_drop_ratio=0.0, train=True):
+        """
+        Maximum likelihood Estimation
+
+        :param x_input:
+        :return: loss
+        """
+        batch_size = len(x_input)
+        _, mu_z, ln_var_z = self.encoder.encode(x_input, train)
 
         self.reset_state()
 
@@ -188,12 +273,12 @@ class SeqGAN(chainer.Chain):
         accum_loss = 0
         for i in range(self.sequence_length):
             if i == 0:
-                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+                x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
             else:
-                if np.random.random() > word_drop_ratio:
-                    x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'))
+                if np.random.random() < word_drop_ratio and train:
+                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
                 else:
-                    x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'))
+                    x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'), volatile=not train)
 
             scores = self.decode_one_step(x, z=z)
             loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
