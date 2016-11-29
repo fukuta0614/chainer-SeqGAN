@@ -37,11 +37,16 @@ class SeqGAN(chainer.Chain):
         layers['embed'] = L.EmbedID(self.vocab_size, self.emb_dim,
                                     initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim)))
         if tag_dim > 0:
-            self.tag_num = tag_dim
-            layers['tag_embed'] = L.EmbedID(self.tag_num, self.tag_num,
-                                            initialW=np.random.normal(scale=0.1, size=(self.tag_num, self.tag_num)))
-            dec_input = self.tag_num + self.hidden_dim
-            layers['dec_input'] = L.Linear(dec_input, self.hidden_dim)
+            if encoder:
+                self.tag_num = tag_dim
+                layers['tag_embed'] = L.EmbedID(self.tag_num, self.tag_num,
+                                                initialW=np.random.normal(scale=0.1, size=(self.tag_num, self.tag_num)))
+                dec_input = self.tag_num + self.hidden_dim
+                layers['dec_input'] = L.Linear(dec_input, self.hidden_dim)
+            else:
+                self.tag_num = tag_dim
+                layers['tag_embed'] = L.EmbedID(self.tag_num, self.hidden_dim)
+
         if self.oracle:
             layers['lstm1'] = L.LSTM(self.input_dim, self.hidden_dim,
                                      lateral_init=chainer.initializers.normal.Normal(0.1),
@@ -174,13 +179,14 @@ class SeqGAN(chainer.Chain):
 
         return gen_x
 
-    def generate(self, batch_size, train=False, pool=None, random_input=False, random_state=False):
+    def generate(self, batch_size, tag=None, train=False, pool=None, random_input=False, random_state=False):
         """
         :return: (batch_size, self.seq_length)
         """
 
         self.reset_state()
         z = None
+
         if self.latent_dim:
             z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.latent_dim)), 'float32'), volatile=True)
         if random_input:
@@ -315,7 +321,7 @@ class SeqGAN(chainer.Chain):
 
         return accum_loss / self.sequence_length
 
-    def pretrain_step(self, x_input):
+    def pretrain_step(self, x_input, tag=None):
         """
         Maximum likelihood Estimation
 
@@ -325,6 +331,9 @@ class SeqGAN(chainer.Chain):
         self.reset_state()
         batch_size = len(x_input)
         accum_loss = 0
+        if tag is not None:
+            self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+
         for i in range(self.sequence_length):
             if i == 0:
                 if self.free_pretrain:

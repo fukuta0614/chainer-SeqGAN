@@ -15,13 +15,23 @@ class SeqEncoder(chainer.Chain):
         self.latent_dim = latent_dim if latent_dim else hidden_dim
         self.sequence_length = sequence_length
         self.input_dim = self.hidden_dim + tag_num
-        super(SeqEncoder, self).__init__(
-            tag_embed=L.EmbedID(tag_num, tag_num, initialW=np.random.normal(scale=0.1, size=(tag_num, tag_num))),
-            embed=L.EmbedID(self.vocab_size, self.emb_dim, initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim))),
-            lstm1=L.LSTM(self.emb_dim, self.hidden_dim),
-            linear_mu=L.Linear(self.input_dim, self.latent_dim),
-            linear_ln_var=L.Linear(self.input_dim, self.latent_dim)
-        )
+
+        if tag_num > 0:
+            super(SeqEncoder, self).__init__(
+                tag_embed=L.EmbedID(tag_num, tag_num, initialW=np.random.normal(scale=0.1, size=(tag_num, tag_num))),
+                embed=L.EmbedID(self.vocab_size, self.emb_dim, initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim))),
+                lstm1=L.LSTM(self.emb_dim, self.hidden_dim),
+                linear_mu=L.Linear(self.input_dim, self.latent_dim),
+                linear_ln_var=L.Linear(self.input_dim, self.latent_dim)
+            )
+        else:
+            super(SeqEncoder, self).__init__(
+                embed=L.EmbedID(self.vocab_size, self.emb_dim,
+                                initialW=np.random.normal(scale=0.1, size=(self.vocab_size, self.emb_dim))),
+                lstm1=L.LSTM(self.emb_dim, self.hidden_dim),
+                linear_mu=L.Linear(self.input_dim, self.latent_dim),
+                linear_ln_var=L.Linear(self.input_dim, self.latent_dim)
+            )
 
     def reset_state(self):
         if hasattr(self, "lstm1"):

@@ -26,19 +26,19 @@ sess.run(tf.initialize_all_variables())
 
 if __name__ == '__main__':
 
-    # for d in os.listdir('runs_vrae'):
-    #     di = 'runs_vrae/' + d
-    #     print(di)
-    #     if os.path.isdir(di):
-    #         summaries = di + '/summaries/'
-    #         for f in os.listdir(summaries):
-    #             accumulator = EventAccumulator(summaries + f)
-    #             accumulator.Reload()  # load event files
-    #             try:
-    #                 _, steps, kl_values = scalar2arrays(accumulator.Scalars('test_loglikelihood'))
-    #                 os.system('mv {}{} old/'.format(summaries, f))
-    #             except:
-    #                 continue
+    for d in os.listdir('runs_vrae'):
+        di = 'runs_vrae/' + d
+        print(di)
+        if os.path.isdir(di):
+            summaries = di + '/summaries/'
+            for f in os.listdir(summaries):
+                accumulator = EventAccumulator(summaries + f)
+                accumulator.Reload()  # load event files
+                try:
+                    _, steps, kl_values = scalar2arrays(accumulator.Scalars('test_loglikelihood'))
+                    os.system('mv {}{} old/'.format(summaries, f))
+                except:
+                    continue
 
     for d in os.listdir('runs_vrae'):
         di = 'runs_vrae/' + d
@@ -61,6 +61,6 @@ if __name__ == '__main__':
             except:
                 continue
             for step, kl, rec in zip(steps, kl_values, rec_values):
-                summary = sess.run(ll, feed_dict={loss_: np.float32(kl + rec)})
+                summary = sess.run(ll, feed_dict={loss_: np.float32(kl + 30*rec)})
                 summary_writer.add_summary(summary, step)
             print('ok')

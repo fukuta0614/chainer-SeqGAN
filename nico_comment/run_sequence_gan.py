@@ -179,6 +179,8 @@ if not args.gen:
 
         for i in range(0, train_num, batch_size):
             batch = train_comment_data[perm[i:i+batch_size]]
+            tag_batch = train_tag_data[perm[i:i + batch_size]]
+
             if args.ae_pretrain:
                 g_loss = generator.pretrain_step_autoencoder(batch)
                 enc_optimizer.zero_grads()
@@ -188,7 +190,7 @@ if not args.gen:
                 gen_optimizer.update()
                 pre_train_loss.append(float(g_loss.data))
             else:
-                g_loss = generator.pretrain_step(batch)
+                g_loss = generator.pretrain_step(batch, tag_batch)
                 gen_optimizer.zero_grads()
                 g_loss.backward()
                 gen_optimizer.update()
@@ -204,7 +206,9 @@ if not args.gen:
 
         for i in range(0, test_num, batch_size):
             batch = test_comment_data[perm[i:i + batch_size]]
-            g_loss = generator.pretrain_step(batch)
+            tag_batch = test_tag_data[perm[i:i + batch_size]]
+
+            g_loss = generator.pretrain_step(batch, tag_batch)
             test_loss.append(float(g_loss.data))
         test_count += 1
 
@@ -245,7 +249,7 @@ if not args.dis:
 
     for epoch in range(args.dis_pretrain_epoch):
 
-        negative = generator.generate(args.sample_per_iter)
+        negative = generator.generate(args.sample_per_iter, )
 
         for k in range(args.K):
 
