@@ -26,6 +26,7 @@ parser.add_argument("--out", default='')
 parser.add_argument("--gen", default='')
 parser.add_argument("--dis", default='')
 parser.add_argument("--enc", default='')
+parser.add_argument("--init", default=0, type=int)
 parser.add_argument('--gpu', '-g', type=int, default=0)
 parser.add_argument('--parallel', '-p', default=0, type=int)
 
@@ -131,7 +132,7 @@ summary_writer = tf.train.SummaryWriter(summary_dir, sess.graph)
 
 dis_train_count = 0
 gen_train_count = 0
-test_count = 0
+test_count = args.init
 
 with open(os.path.join(out_dir, "generated_sample_pretrain.txt"), 'w') as f:
     f.write('')
@@ -150,136 +151,135 @@ def progress_report(count, start_time, batchsize):
     )
 
 
-if not args.gen:
-    print('Start pre-training generator...')
-    start = time.time()
-    C = args.kl_initial
-    for epoch in range(args.gen_pretrain_epoch):
+print('Start pre-training generator...')
+start = time.time()
+C = args.kl_initial
+for epoch in range(args.init, args.gen_pretrain_epoch):
 
-        # pre-train
-        pre_train_loss = []
-        sum_g_loss = []
-        sum_kl_loss = []
-        perm = np.random.permutation(train_num)
-        if args.kl_anneal:
-            C += args.kl_anneal_ratio
+    # pre-train
+    pre_train_loss = []
+    sum_g_loss = []
+    sum_kl_loss = []
+    perm = np.random.permutation(train_num)
+    if args.kl_anneal:
+        C += args.kl_anneal_ratio
 
-        for i in range(0, train_num, batch_size):
-            x_batch = train_comment_data[perm[i:i + batch_size]]
-            tag_batch = train_tag_data[perm[i:i + batch_size]]
-            if args.vae:
-                if args.use_tag:
-                    g_loss, kl_loss = generator.pretrain_step_vrae_tag(x_batch, tag_batch, args.word_drop)
-                else:
-                    g_loss, kl_loss = generator.pretrain_step_vrae(x_batch, args.word_drop)
-
-                loss = g_loss + C * kl_loss
-
-                enc_optimizer.zero_grads()
-                gen_optimizer.zero_grads()
-                loss.backward()
-                enc_optimizer.update()
-                gen_optimizer.update()
-
-                pre_train_loss.append(float(loss.data))
-                sum_g_loss.append(float(g_loss.data))
-                sum_kl_loss.append(float(kl_loss.data))
-            else:
-                g_loss = generator.pretrain_step_autoencoder(x_batch)
-                enc_optimizer.zero_grads()
-                gen_optimizer.zero_grads()
-                g_loss.backward()
-                enc_optimizer.update()
-                gen_optimizer.update()
-                pre_train_loss.append(float(g_loss.data))
-
-            # progress report
-            gen_train_count += 1
-            progress_report(gen_train_count, start, batch_size)
-
-        # test
-        test_loss = []
-        sum_test_g_loss = []
-        sum_test_kl_loss = []
-        perm = np.random.permutation(test_num)
-
-        for i in range(0, test_num, batch_size):
-            x_batch = test_comment_data[perm[i:i + batch_size]]
-            tag_batch = test_tag_data[perm[i:i + batch_size]]
-            if args.vae:
-                if args.use_tag:
-                    g_loss, kl_loss = generator.pretrain_step_vrae_tag(x_batch, tag_batch, args.word_drop, train=False)
-                else:
-                    g_loss, kl_loss = generator.pretrain_step_vrae(x_batch, args.word_drop, train=False)
-
-                loss = g_loss + kl_loss
-                sum_test_g_loss.append(float(g_loss.data))
-                sum_test_kl_loss.append(float(kl_loss.data))
-                test_loss.append(float(loss.data))
-
-            else:
-                loss = generator.pretrain_step_(x_batch)
-                test_loss.append(float(loss.data))
-
-        test_count += 1
-
+    for i in range(0, train_num, batch_size):
+        x_batch = train_comment_data[perm[i:i + batch_size]]
+        tag_batch = train_tag_data[perm[i:i + batch_size]]
         if args.vae:
-            print('\npre-train epoch {}'.format(epoch))
-            print('  train : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_g_loss), np.mean(sum_kl_loss), np.mean(pre_train_loss)))
-            print('   test : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_test_g_loss), np.mean(sum_test_kl_loss), np.mean(test_loss)))
-
-            summary = sess.run(train_loss_summary, feed_dict={loss_: np.mean(pre_train_loss)})
-            summary_writer.add_summary(summary, test_count)
-            summary = sess.run(train_g_loss_summary, feed_dict={loss_: np.mean(sum_g_loss)})
-            summary_writer.add_summary(summary, test_count)
-            summary = sess.run(train_kl_loss_summary, feed_dict={loss_: np.mean(sum_kl_loss)})
-            summary_writer.add_summary(summary, test_count)
-
-            summary = sess.run(test_loss_summary, feed_dict={loss_: np.mean(test_loss)})
-            summary_writer.add_summary(summary, test_count)
-            summary = sess.run(test_g_loss_summary, feed_dict={loss_: np.mean(sum_test_g_loss)})
-            summary_writer.add_summary(summary, test_count)
-            summary = sess.run(test_kl_loss_summary, feed_dict={loss_: np.mean(sum_test_kl_loss)})
-            summary_writer.add_summary(summary, test_count)
-
             if args.use_tag:
-                tag_batch_1 = np.repeat(range(len(tag_id)), 5)
-                samples = generator.generate_use_tag(tag_batch_1, train=False)
-                perm = np.random.permutation(test_num)
-                x_batch = test_comment_data[perm[:50]]
-                tag_batch_2 = test_tag_data[perm[:50]]
-                autoencode_samples = generator.generate_use_tag(tag_batch_2, x_batch, train=False)
-                with open(os.path.join(out_dir, "generated_sample_pretrain.txt"), 'a', encoding='utf-8') as f:
-                    f.write('\npre-train epoch {}  train_loss {} test_loss {} \n'.format(epoch, np.mean(pre_train_loss),
-                                                                                         np.mean(test_loss)))
-                    sentences = [''.join([vocab[w] for w in x]) for i, x in enumerate(samples)]
-                    for x, y in zip(sentences, tag_batch_1):
-                        f.write(tag_id[y] + '     ' + x + '\n')
-
-                    sentences = [''.join([vocab[w] for w in x]) for i, x in enumerate(autoencode_samples)]
-                    for x, y in zip(sentences, tag_batch_2):
-                        f.write(tag_id[y] + '     ' + x + '\n')
+                g_loss, kl_loss = generator.pretrain_step_vrae_tag(x_batch, tag_batch, args.word_drop)
             else:
-                samples = generator.generate(10, train=False)
-                with open(os.path.join(out_dir, "generated_sample_pretrain.txt"), 'a', encoding='utf-8') as f:
-                    f.write('\npre-train epoch {}  train_loss {} test_loss {} \n'.format(epoch, np.mean(pre_train_loss),
-                                                                                         np.mean(test_loss)))
-                    for x in samples:
-                        f.write(''.join([vocab[w] for w in x]) + '\n')
-        else:
-            print('\npre-train epoch {}  train_loss {}  test_loss {}'.format(epoch, np.mean(pre_train_loss), np.mean(test_loss)))
-            summary = sess.run(train_loss_summary, feed_dict={loss_: np.mean(pre_train_loss)})
-            summary_writer.add_summary(summary, test_count)
-            summary = sess.run(test_loss_summary, feed_dict={loss_: np.mean(test_loss)})
-            summary_writer.add_summary(summary, test_count)
-            samples = generator.generate(10, train=False)
+                g_loss, kl_loss = generator.pretrain_step_vrae(x_batch, args.word_drop)
 
+            loss = g_loss + C * kl_loss
+
+            enc_optimizer.zero_grads()
+            gen_optimizer.zero_grads()
+            loss.backward()
+            enc_optimizer.update()
+            gen_optimizer.update()
+
+            pre_train_loss.append(float(loss.data))
+            sum_g_loss.append(float(g_loss.data))
+            sum_kl_loss.append(float(kl_loss.data))
+        else:
+            g_loss = generator.pretrain_step_autoencoder(x_batch)
+            enc_optimizer.zero_grads()
+            gen_optimizer.zero_grads()
+            g_loss.backward()
+            enc_optimizer.update()
+            gen_optimizer.update()
+            pre_train_loss.append(float(g_loss.data))
+
+        # progress report
+        gen_train_count += 1
+        progress_report(gen_train_count, start, batch_size)
+
+    # test
+    test_loss = []
+    sum_test_g_loss = []
+    sum_test_kl_loss = []
+    perm = np.random.permutation(test_num)
+
+    for i in range(0, test_num, batch_size):
+        x_batch = test_comment_data[perm[i:i + batch_size]]
+        tag_batch = test_tag_data[perm[i:i + batch_size]]
+        if args.vae:
+            if args.use_tag:
+                g_loss, kl_loss = generator.pretrain_step_vrae_tag(x_batch, tag_batch, args.word_drop, train=False)
+            else:
+                g_loss, kl_loss = generator.pretrain_step_vrae(x_batch, args.word_drop, train=False)
+
+            loss = g_loss + kl_loss
+            sum_test_g_loss.append(float(g_loss.data))
+            sum_test_kl_loss.append(float(kl_loss.data))
+            test_loss.append(float(loss.data))
+
+        else:
+            loss = generator.pretrain_step_(x_batch)
+            test_loss.append(float(loss.data))
+
+    test_count += 1
+
+    if args.vae:
+        print('\npre-train epoch {}'.format(epoch))
+        print('  train : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_g_loss), np.mean(sum_kl_loss), np.mean(pre_train_loss)))
+        print('   test : rec_loss {}  kl_loss {} loss {}'.format(np.mean(sum_test_g_loss), np.mean(sum_test_kl_loss), np.mean(test_loss)))
+
+        summary = sess.run(train_loss_summary, feed_dict={loss_: np.mean(pre_train_loss)})
+        summary_writer.add_summary(summary, test_count)
+        summary = sess.run(train_g_loss_summary, feed_dict={loss_: np.mean(sum_g_loss)})
+        summary_writer.add_summary(summary, test_count)
+        summary = sess.run(train_kl_loss_summary, feed_dict={loss_: np.mean(sum_kl_loss)})
+        summary_writer.add_summary(summary, test_count)
+
+        summary = sess.run(test_loss_summary, feed_dict={loss_: np.mean(test_loss)})
+        summary_writer.add_summary(summary, test_count)
+        summary = sess.run(test_g_loss_summary, feed_dict={loss_: np.mean(sum_test_g_loss)})
+        summary_writer.add_summary(summary, test_count)
+        summary = sess.run(test_kl_loss_summary, feed_dict={loss_: np.mean(sum_test_kl_loss)})
+        summary_writer.add_summary(summary, test_count)
+
+        if args.use_tag:
+            tag_batch_1 = np.repeat(range(len(tag_id)), 5)
+            samples = generator.generate_use_tag(tag_batch_1, train=False)
+            perm = np.random.permutation(test_num)
+            x_batch = test_comment_data[perm[:50]]
+            tag_batch_2 = test_tag_data[perm[:50]]
+            autoencode_samples = generator.generate_use_tag(tag_batch_2, x_batch, train=False)
+            with open(os.path.join(out_dir, "generated_sample_pretrain.txt"), 'a', encoding='utf-8') as f:
+                f.write('\npre-train epoch {}  train_loss {} test_loss {} \n'.format(epoch, np.mean(pre_train_loss),
+                                                                                     np.mean(test_loss)))
+                sentences = [''.join([vocab[w] for w in x]) for i, x in enumerate(samples)]
+                for x, y in zip(sentences, tag_batch_1):
+                    f.write(tag_id[y] + '     ' + x + '\n')
+
+                sentences = [''.join([vocab[w] for w in x]) for i, x in enumerate(autoencode_samples)]
+                for x, y in zip(sentences, tag_batch_2):
+                    f.write(tag_id[y] + '     ' + x + '\n')
+        else:
+            samples = generator.generate(10, train=False)
             with open(os.path.join(out_dir, "generated_sample_pretrain.txt"), 'a', encoding='utf-8') as f:
                 f.write('\npre-train epoch {}  train_loss {} test_loss {} \n'.format(epoch, np.mean(pre_train_loss),
                                                                                      np.mean(test_loss)))
                 for x in samples:
                     f.write(''.join([vocab[w] for w in x]) + '\n')
+    else:
+        print('\npre-train epoch {}  train_loss {}  test_loss {}'.format(epoch, np.mean(pre_train_loss), np.mean(test_loss)))
+        summary = sess.run(train_loss_summary, feed_dict={loss_: np.mean(pre_train_loss)})
+        summary_writer.add_summary(summary, test_count)
+        summary = sess.run(test_loss_summary, feed_dict={loss_: np.mean(test_loss)})
+        summary_writer.add_summary(summary, test_count)
+        samples = generator.generate(10, train=False)
 
-        if epoch > 0 and epoch % 5 == 0:
-            serializers.save_hdf5(os.path.join(out_dir, "models", "gen_pretrain_{}.model".format(epoch)), generator)
-            serializers.save_hdf5(os.path.join(out_dir, "models", "enc_pretrain_{}.model".format(epoch)), encoder)
+        with open(os.path.join(out_dir, "generated_sample_pretrain.txt"), 'a', encoding='utf-8') as f:
+            f.write('\npre-train epoch {}  train_loss {} test_loss {} \n'.format(epoch, np.mean(pre_train_loss),
+                                                                                 np.mean(test_loss)))
+            for x in samples:
+                f.write(''.join([vocab[w] for w in x]) + '\n')
+
+    if epoch > 0 and epoch % 5 == 0:
+        serializers.save_hdf5(os.path.join(out_dir, "models", "gen_pretrain_{}.model".format(epoch)), generator)
+        serializers.save_hdf5(os.path.join(out_dir, "models", "enc_pretrain_{}.model".format(epoch)), encoder)
