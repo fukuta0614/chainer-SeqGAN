@@ -148,8 +148,8 @@ class SeqGAN(chainer.Chain):
         self.reset_state()
         batch_size = len(tag)
         if train:
-            tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
-            self.lstm1.h = tag_
+            self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+
         else:
             if x is not None:
                 _, mu_z, ln_var_z = self.encoder.encode_with_tag(x, tag, train)
@@ -184,7 +184,7 @@ class SeqGAN(chainer.Chain):
 
         return gen_x
 
-    def generate(self, batch_size, tag=None, train=False, pool=None, random_input=False, random_state=False):
+    def generate(self, batch_size, train=False, pool=None, random_input=False, random_state=False):
         """
         :return: (batch_size, self.seq_length)
         """
@@ -354,7 +354,7 @@ class SeqGAN(chainer.Chain):
 
         return accum_loss / self.sequence_length
 
-    def reinforcement_step(self, x_input, rewards, g_steps, random_input=False):
+    def reinforcement_step(self, x_input, rewards, g_steps, tag=None, random_input=False):
         """
         :param x_input: (batch_size, seq_length)
         :param rewards: (batch_size, seq_length)
@@ -364,6 +364,9 @@ class SeqGAN(chainer.Chain):
         self.reset_state()
         batch_size = len(x_input)
         accum_loss = 0
+        if tag is not None:
+            self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+
         for j in range(self.sequence_length):
             if j == 0:
                 if random_input:
@@ -382,7 +385,7 @@ class SeqGAN(chainer.Chain):
 
         return -accum_loss / g_steps
 
-    def get_rewards(self, samples, dis, rollout_num=16, pool=None, gpu=0):
+    def get_rewards(self, samples, dis, rollout_num=16, tag=None, pool=None, gpu=0):
         """
         get reward from generated sample for ROLLOUT
 
@@ -406,7 +409,11 @@ class SeqGAN(chainer.Chain):
         else:
             reward_mat = np.zeros((batch_size, self.sequence_length), 'float32')
             for given in range(1, self.sequence_length):
-                rewards = self.roll_out((samples, given, dis, rollout_num))
+                if tag is not None:
+                    rewards = self.roll_out((samples, given, dis, rollout_num, gpu, tag))
+                else:
+                    rewards = self.roll_out((samples, given, dis, rollout_num))
+
                 reward_mat[:, given - 1] = rewards
 
             reward_mat[:, 19] = dis.get_reward(samples)
@@ -431,11 +438,17 @@ class SeqGAN(chainer.Chain):
             cuda.get_device(gpu).use()
             dis.to_gpu()
             self.to_gpu()
+        elif len(args) == 6:
+            samples, given, dis, rollout_num, gpu, tag = args
         else:
             raise AssertionError('undesired argument')
 
         batch_size = len(samples)
         self.reset_state()
+
+        if tag is not None:
+            self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32')))
+
         gen_x = np.zeros((batch_size, self.sequence_length), 'int32')
 
         x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=True)

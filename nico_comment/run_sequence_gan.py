@@ -107,7 +107,7 @@ else:
 # generator
 generator = SeqGAN(vocab_size=vocab_size, emb_dim=args.gen_emb_dim, hidden_dim=args.gen_hidden_dim,
                    sequence_length=seq_length, start_token=start_token, lstm_layer=args.num_lstm_layer,
-                   dropout=args.dropout, free_pretrain=args.free_pretrain, encoder=encoder).to_gpu()
+                   dropout=args.dropout, free_pretrain=args.free_pretrain, encoder=encoder, tag_dim=len(tag_id)).to_gpu()
 if args.gen:
     serializers.load_hdf5(args.gen, generator)
 
@@ -329,9 +329,10 @@ for epoch in range(1, args.total_epoch):
     # g-step
     mean_time = 0
     for step in range(args.g_steps):
-        samples = generator.generate_use_tag(batch_size, train=True)
-        rewards = rollout_generator.get_rewards(samples, discriminator, pool=pool, gpu=args.gpu)
-        loss = generator.reinforcement_step(samples, rewards, g_steps=args.g_steps)
+        tag_batch = np.random.choice(train_tag_data, batch_size)
+        samples = generator.generate_use_tag(batch_size, tag=tag_batch, train=True)
+        rewards = rollout_generator.get_rewards(samples, discriminator, tag=tag_batch, pool=pool, gpu=args.gpu)
+        loss = generator.reinforcement_step(samples, rewards, tag=tag_batch, g_steps=args.g_steps)
         gen_optimizer.zero_grads()
         loss.backward()
         gen_optimizer.update()
