@@ -95,7 +95,7 @@ with open('nico_comment_processed.dat', 'rb') as f:
 train_num = len(train_comment_data)
 test_num = len(test_comment_data)
 vocab_size = 3000
-seq_length = 30
+seq_length = 20
 start_token = 0
 
 if args.ae_pretrain:
