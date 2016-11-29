@@ -153,9 +153,7 @@ def progress_report(count, start_time, batchsize):
 if not args.gen:
     print('Start pre-training generator...')
     start = time.time()
-
     C = args.kl_initial
-
     for epoch in range(args.gen_pretrain_epoch):
 
         # pre-train
