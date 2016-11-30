@@ -95,7 +95,7 @@ with open('nico_comment_processed3.dat', 'rb') as f:
 train_num = len(train_comment_data)
 test_num = len(test_comment_data)
 vocab_size = 3000
-seq_length = 20
+seq_length = 30
 start_token = 0
 
 if args.ae_pretrain:
@@ -171,12 +171,12 @@ def progress_report(count, start_time, batchsize):
 if not args.gen:
     print('Start pre-training generator...')
     start = time.time()
+    batch_size *= 20
     for epoch in range(args.gen_pretrain_epoch):
 
         # pre-train
         pre_train_loss = []
         perm = np.random.permutation(train_num)
-
         for i in range(0, train_num, batch_size):
             batch = train_comment_data[perm[i:i+batch_size]]
             tag_batch = train_tag_data[perm[i:i + batch_size]]
@@ -225,9 +225,9 @@ if not args.gen:
             for x in samples:
                 f.write(''.join([vocab[w] for w in x]) + '\n')
 
-        if epoch > 0 and epoch % 10 == 0:
+        if epoch % 1 == 0:
             serializers.save_hdf5(os.path.join(out_dir, "models", "gen_pretrain_{}.model".format(epoch)), generator)
-
+    batch_size /= 20
 else:
     # test
     test_loss = []
@@ -241,6 +241,7 @@ else:
     summary = sess.run(test_loss_summary, feed_dict={loss_: np.mean(test_loss)})
     summary_writer.add_summary(summary, test_count)
 
+
 # discriminator pre-train
 if not args.dis:
     train_count = 0
@@ -249,13 +250,13 @@ if not args.dis:
 
     for epoch in range(args.dis_pretrain_epoch):
 
-        tag_batch = np.random.choice(train_tag_data, batch_size)
-        negative = generator.generate_use_tag(args.sample_per_iter, tag_batch, train=True)
+        tag_batch = np.random.choice(train_tag_data, args.sample_per_iter)
+        negative = generator.generate_use_tag(tag_batch, train=True)
 
         for k in range(args.K):
 
             positive = train_comment_data[np.random.permutation(train_num)[:args.sample_per_iter]]
-
+            print(positive.shape, negative.shape)
             x = np.vstack([positive, negative])
             y = np.array([1] * args.sample_per_iter + [0] * args.sample_per_iter)
             sum_train_loss = []
@@ -329,8 +330,8 @@ for epoch in range(1, args.total_epoch):
     # g-step
     mean_time = 0
     for step in range(args.g_steps):
-        tag_batch = np.random.choice(train_tag_data, batch_size)
-        samples = generator.generate_use_tag(batch_size, tag=tag_batch, train=True)
+        tag_batch = np.random.choice(train_tag_data, args.sample_per_iter)
+        negative = generator.generate_use_tag(tag_batch, train=True)
         rewards = rollout_generator.get_rewards(samples, discriminator, tag=tag_batch, pool=pool, gpu=args.gpu)
         loss = generator.reinforcement_step(samples, rewards, tag=tag_batch, g_steps=args.g_steps)
         gen_optimizer.zero_grads()
@@ -412,6 +413,6 @@ for epoch in range(1, args.total_epoch):
         for x in samples:
             f.write(''.join([vocab[w] for w in x]) + '\n')
 
-    if epoch % 10 == 0:
+    if epoch % 1 == 0:
         serializers.save_hdf5(os.path.join(out_dir, "models/gen_{:03d}.model".format(epoch)), generator)
         serializers.save_hdf5(os.path.join(out_dir, "models/dis_{:03d}.model".format(epoch)), discriminator)

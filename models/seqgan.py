@@ -272,7 +272,6 @@ class SeqGAN(chainer.Chain):
         """
         batch_size = len(x_input)
         _, mu_z, ln_var_z = self.encoder.encode(x_input, train)
-
         self.reset_state()
 
         if self.latent_dim:
@@ -292,10 +291,10 @@ class SeqGAN(chainer.Chain):
                     x = chainer.Variable(self.xp.asanyarray(x_input[:, i - 1], 'int32'), volatile=not train)
 
             scores = self.decode_one_step(x, z=z)
-            loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
+            loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32'), volatile=not train))
             accum_loss += loss
 
-        dec_loss = accum_loss / self.sequence_length
+        dec_loss = accum_loss
         kl_loss = F.gaussian_kl_divergence(mu_z, ln_var_z) / batch_size
         return dec_loss, kl_loss
 
@@ -352,7 +351,7 @@ class SeqGAN(chainer.Chain):
             loss = F.softmax_cross_entropy(scores, chainer.Variable(self.xp.asanyarray(x_input[:, i], 'int32')))
             accum_loss += loss
 
-        return accum_loss / self.sequence_length
+        return accum_loss  # / self.sequence_length
 
     def reinforcement_step(self, x_input, rewards, g_steps, tag=None, random_input=False):
         """
