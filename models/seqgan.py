@@ -430,6 +430,7 @@ class SeqGAN(chainer.Chain):
 
         :return: rewards (batch_size)
         """
+        tag = None
         if len(args) == 4:
             samples, given, dis, rollout_num = args
         elif len(args) == 5:
