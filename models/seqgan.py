@@ -157,8 +157,11 @@ class SeqGAN(chainer.Chain):
             else:
                 z = chainer.Variable(self.xp.asanyarray(np.random.normal(scale=1, size=(batch_size, self.emb_dim)), 'float32'), volatile=not train)
 
-            tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
-            self.lstm1.h = self.dec_input(F.concat((z, tag_)))
+            if self.encoder:
+                tag_ = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
+                self.lstm1.h = self.dec_input(F.concat((z, tag_)))
+            else:
+                self.lstm1.h = self.tag_embed(chainer.Variable(self.xp.array(tag, 'int32'), volatile=not train))
 
         x = chainer.Variable(self.xp.asanyarray([self.start_token] * batch_size, 'int32'), volatile=not train)
 
